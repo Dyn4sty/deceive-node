@@ -2,7 +2,6 @@
  * Startup handler - orchestrates the application startup sequence
  */
 
-import { createServer } from 'node:net';
 import { LaunchGame, PresenceStatus, PRODUCT_NAMES, ChatServerConfig } from './types.js';
 import { ConfigProxy } from './proxy/config-proxy.js';
 import { MainController } from './controller.js';
@@ -11,7 +10,7 @@ import { launchRiotClient } from './launcher/game-launcher.js';
 import { config } from './config/config.js';
 import { logger } from './utils/logger.js';
 import { promptForGame, promptForStatus } from './ui/cli.js';
-import { VERSION } from './utils/version.js';
+import packageJson from '../package.json' with { type: 'json' };
 
 /**
  * Main entry point for starting Deceive
@@ -22,7 +21,7 @@ export async function startDeceive(
   patchline: string,
   showTray: boolean
 ): Promise<void> {
-  logger.info(`League Deceiver ${VERSION}`);
+  logger.info(`League Deceiver v${packageJson.version}`);
 
   // Convert status string to enum, or null for interactive prompt
   let status: PresenceStatus;
@@ -81,21 +80,17 @@ export async function startDeceive(
     `Status: ${status === PresenceStatus.Offline ? 'Offline' : status === PresenceStatus.Mobile ? 'Mobile' : 'Online'}`
   );
 
-  // Step 1: Open a port for our chat proxy
-  const chatListener = createServer();
-  await new Promise<void>((resolve) => {
-    chatListener.listen(0, '127.0.0.1', () => resolve());
-  });
-  const chatPort = (chatListener.address() as { port: number }).port;
+  // Step 1: Create main controller (will set up chat proxy listener)
+  const mainController = new MainController(status, showTray);
+
+  // Step 2: Start the chat TLS listener using Bun's native API
+  const chatPort = mainController.startChatListener();
   logger.info(`Chat proxy listening on port ${chatPort}`);
 
-  // Step 2: Start config proxy
+  // Step 3: Start config proxy
   const configProxy = new ConfigProxy(chatPort);
-  await configProxy.start();
+  configProxy.start();
   logger.info(`Config proxy listening on port ${configProxy.port}`);
-
-  // Step 3: Create main controller
-  const mainController = new MainController(status, showTray);
 
   // Step 4: Listen for chat server configuration
   let servingClients = false;
@@ -104,11 +99,7 @@ export async function startDeceive(
 
     if (!servingClients) {
       servingClients = true;
-      mainController.startServingClients(
-        chatListener,
-        serverConfig.chatHost,
-        serverConfig.chatPort
-      );
+      mainController.setChatServerConfig(serverConfig.chatHost, serverConfig.chatPort);
     }
   });
 
@@ -124,7 +115,6 @@ export async function startDeceive(
     logger.info('Shutting down...');
     mainController.stop();
     configProxy.stop();
-    chatListener.close();
     process.exit(0);
   });
 
@@ -132,7 +122,6 @@ export async function startDeceive(
     logger.info('Shutting down...');
     mainController.stop();
     configProxy.stop();
-    chatListener.close();
     process.exit(0);
   });
 }

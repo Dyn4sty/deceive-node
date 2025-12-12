@@ -1,15 +1,9 @@
 /**
- * Jest test setup
+ * Bun test setup
+ *
+ * Bun's test runner automatically handles console output suppression
+ * during test execution, so no explicit mocking is needed.
  */
 
-// Global test configuration
-beforeAll(() => {
-  // Suppress console output during tests
-  jest.spyOn(console, 'log').mockImplementation(() => {});
-  jest.spyOn(console, 'warn').mockImplementation(() => {});
-  jest.spyOn(console, 'error').mockImplementation(() => {});
-});
-
-afterAll(() => {
-  jest.restoreAllMocks();
-});
+// This file can be used for global test setup if needed in the future
+// Bun's test runner will automatically import this file if it exists

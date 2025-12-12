@@ -1,9 +1,10 @@
 /**
  * Config Proxy - Intercepts Riot Client configuration requests
  * and rewrites chat server addresses to point to localhost
+ *
+ * Uses Bun's native HTTP server for better performance
  */
 
-import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
 import { EventEmitter } from 'events';
 import { ChatServerConfig } from '../types.js';
 import { logger } from '../utils/logger.js';
@@ -16,58 +17,60 @@ interface ConfigProxyEvents {
 }
 
 export class ConfigProxy extends EventEmitter {
-  private server: Server;
+  private server: ReturnType<typeof Bun.serve> | null = null;
   private _port: number = 0;
   private chatPort: number;
 
   constructor(chatPort: number) {
     super();
     this.chatPort = chatPort;
-    this.server = createServer((req, res) => {
-      this.handleRequest(req, res).catch((err) => {
-        logger.error('Error handling request:', err);
-        res.statusCode = 500;
-        res.end('Internal Server Error');
-      });
-    });
   }
 
   get port(): number {
     return this._port;
   }
 
-  async start(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server.listen(0, '127.0.0.1', () => {
-        const address = this.server.address();
-        if (address && typeof address === 'object') {
-          this._port = address.port;
-        }
-        resolve();
-      });
+  start(): void {
+    // Use port 0 to get a random available port
+    this.server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch: async (req) => {
+        return this.handleRequest(req);
+      },
     });
+
+    this._port = this.server.port!;
+    logger.debug(`Config proxy started on port ${this._port}`);
   }
 
   stop(): void {
-    this.server.close();
+    if (this.server) {
+      void this.server.stop().then(() => {
+        this.server = null;
+      });
+    }
   }
 
-  private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = `${CONFIG_URL}${req.url}`;
+  private async handleRequest(req: Request): Promise<Response> {
+    const reqUrl = new URL(req.url);
+    const url = `${CONFIG_URL}${reqUrl.pathname}${reqUrl.search}`;
     logger.debug(`Proxying request: ${url}`);
 
     try {
       // Forward request to Riot's config server
       const headers: Record<string, string> = {
-        'User-Agent': req.headers['user-agent'] ?? 'LeagueDeceiver',
+        'User-Agent': req.headers.get('user-agent') ?? 'LeagueDeceiver',
       };
 
       // Copy authorization headers
-      if (req.headers['x-riot-entitlements-jwt']) {
-        headers['X-Riot-Entitlements-JWT'] = String(req.headers['x-riot-entitlements-jwt']);
+      const entitlementsJwt = req.headers.get('x-riot-entitlements-jwt');
+      if (entitlementsJwt) {
+        headers['X-Riot-Entitlements-JWT'] = entitlementsJwt;
       }
-      if (req.headers['authorization']) {
-        headers['Authorization'] = String(req.headers['authorization']);
+      const authorization = req.headers.get('authorization');
+      if (authorization) {
+        headers['Authorization'] = authorization;
       }
 
       const response = await fetch(url, { headers });
@@ -77,10 +80,10 @@ export class ConfigProxy extends EventEmitter {
 
       if (!response.ok) {
         // Forward error response as-is
-        res.statusCode = response.status;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(content);
-        return;
+        return new Response(content, {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Parse and modify the config
@@ -110,11 +113,11 @@ export class ConfigProxy extends EventEmitter {
           if (
             'chat.affinity.enabled' in config &&
             config['chat.affinity.enabled'] === true &&
-            req.headers['authorization']
+            authorization
           ) {
             try {
               const pasResponse = await fetch(GEO_PAS_URL, {
-                headers: { Authorization: String(req.headers['authorization']) },
+                headers: { Authorization: authorization },
               });
               const pasJwt = await pasResponse.text();
               const pasJwtParts = pasJwt.split('.');
@@ -159,13 +162,13 @@ export class ConfigProxy extends EventEmitter {
         // Return original content on error
       }
 
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(modifiedContent);
+      return new Response(modifiedContent, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     } catch (err) {
       logger.error('Proxy request failed:', err);
-      res.statusCode = 502;
-      res.end('Bad Gateway');
+      return new Response('Bad Gateway', { status: 502 });
     }
   }
 

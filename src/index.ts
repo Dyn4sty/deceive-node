@@ -9,13 +9,12 @@
 import { program } from 'commander';
 import { startDeceive } from './startup.js';
 import { LaunchGame } from './types.js';
-import { VERSION } from './utils/version.js';
 import { logger } from './utils/logger.js';
-
+import packageJson from '../package.json' with { type: 'json' };
 program
   .name('league-deceiver')
   .description('Appear offline in League of Legends, VALORANT, and Legends of Runeterra')
-  .version(VERSION);
+  .version(packageJson.version);
 
 program
   .command('launch')
@@ -36,14 +35,6 @@ program
 
     const launchGame = gameMap[game.toLowerCase()] ?? LaunchGame.Prompt;
     await startDeceive(launchGame, options.status, options.patchline, options.tray);
-  });
-
-program
-  .command('setup')
-  .description('Set up League Deceiver (generate certificates)')
-  .action(async () => {
-    const { setupCertificates } = await import('./proxy/certificate.js');
-    setupCertificates();
   });
 
 // If no arguments provided (double-clicked), launch with interactive prompt

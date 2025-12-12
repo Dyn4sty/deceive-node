@@ -22,7 +22,7 @@ type StatusCallback = (status: PresenceStatus) => void;
 type VoidCallback = () => void;
 
 // Tray instance and state
-let systrayInstance: unknown = null;
+let systrayInstance: SysTray.default | null = null;
 export let currentStatus: PresenceStatus = PresenceStatus.Offline;
 let statusCallback: StatusCallback | null = null;
 let quitCallback: VoidCallback | null = null;
@@ -122,13 +122,16 @@ function updateMenuCheckedStates(newStatus: PresenceStatus): void {
   mobileItem.checked = newStatus === PresenceStatus.Mobile;
   onlineItem.checked = newStatus === PresenceStatus.Online;
 
-  const systray = systrayInstance as {
-    sendAction: (action: { type: string; item: MenuItem }) => void;
-  };
-
-  systray.sendAction({ type: 'update-item', item: offlineItem });
-  systray.sendAction({ type: 'update-item', item: mobileItem });
-  systray.sendAction({ type: 'update-item', item: onlineItem });
+  const systray = systrayInstance;
+  systray.sendAction({ type: 'update-item', item: offlineItem }).catch((err: Error) => {
+    logger.warn(`Failed to update offline item: ${err.message}`);
+  });
+  systray.sendAction({ type: 'update-item', item: mobileItem }).catch((err: Error) => {
+    logger.warn(`Failed to update mobile item: ${err.message}`);
+  });
+  systray.sendAction({ type: 'update-item', item: onlineItem }).catch((err: Error) => {
+    logger.warn(`Failed to update online item: ${err.message}`);
+  });
 }
 
 /**
@@ -204,8 +207,8 @@ export async function createTray(
     };
 
     const iconBase64 = await getIconBase64Async(initialStatus);
-
-    systrayInstance = new SysTray.default({
+    // @ts-expect-error - SysTray is not constructable in ESM
+    systrayInstance = new SysTray({
       menu: {
         icon: iconBase64,
         title: 'Deceive',

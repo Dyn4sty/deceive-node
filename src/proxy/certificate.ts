@@ -104,7 +104,7 @@ export function getCertificate(): CertificateResult {
     return cachedCertificate;
   }
 
-  // Generate new certificate
+  // Generate new certificate (first-time setup)
   cachedCertificate = generateCertificate();
 
   // Save to disk
@@ -115,25 +115,7 @@ export function getCertificate(): CertificateResult {
 
   writeFileSync(certPath, cachedCertificate.certificate);
   writeFileSync(keyPath, cachedCertificate.privateKey);
-  logger.info(`Certificate saved to ${certPath}`);
+  logger.info(`Certificate generated and saved to ${certPath}`);
 
   return cachedCertificate;
-}
-
-/**
- * Setup certificates (called from CLI setup command)
- */
-export function setupCertificates() {
-  logger.info('Setting up certificates...');
-
-  getCertificate();
-  const { certPath } = getCertPaths();
-
-  logger.info(`Certificate generated at: ${certPath}`);
-  logger.info('');
-  logger.info('Note: The Riot Client allows self-signed certificates when');
-  logger.info('chat.allow_bad_cert.enabled is set to true in the config.');
-  logger.info('League Deceiver automatically enables this setting.');
-  logger.info('');
-  logger.info('Setup complete!');
 }

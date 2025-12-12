@@ -2,6 +2,7 @@
  * Certificate generation tests
  */
 
+import { describe, it, expect } from 'bun:test';
 import { getCertificate } from '../../src/proxy/certificate.js';
 
 describe('Certificate', () => {

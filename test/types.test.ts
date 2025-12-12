@@ -2,6 +2,7 @@
  * Types tests
  */
 
+import { describe, it, expect } from 'bun:test';
 import { LaunchGame, PresenceStatus, PRODUCT_NAMES } from '../src/types.js';
 
 describe('Types', () => {
