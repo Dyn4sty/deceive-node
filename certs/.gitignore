@@ -1,0 +1,6 @@
+# Ignore certificate files - NEVER commit these!
+*.pfx
+*.p12
+*.pem
+*.key
+*.base64

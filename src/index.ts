@@ -49,7 +49,7 @@ program
 // If no arguments provided (double-clicked), launch with interactive prompt
 if (process.argv.length === 2) {
   // Pass null for status to trigger interactive prompt
-  startDeceive(LaunchGame.Prompt, null, 'live', true).catch((err: unknown) => {
+  startDeceive(LaunchGame.RiotClient, 'online', 'live', true).catch((err: unknown) => {
     logger.error(`Error starting Deceive: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   });

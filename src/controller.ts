@@ -23,14 +23,14 @@ export class MainController {
     this.showTray = showTray;
 
     if (showTray) {
-      this.initTray();
+      void this.initTray();
     }
 
     logger.info(`Initial status: ${this.status}`);
   }
 
-  private initTray(): void {
-    createTray(
+  private async initTray(): Promise<void> {
+    await createTray(
       this.status,
       (newStatus) => {
         void this.setStatus(newStatus);

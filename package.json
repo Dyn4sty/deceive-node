@@ -19,11 +19,15 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "package": "bun build --compile --minify --sourcemap ./src/index.ts --outfile ./dist/deceive-node",
-    "package:win": "bun build --compile --minify --sourcemap --target=bun-windows-x64 ./src/index.ts --outfile ./dist/deceive-node-win.exe && node scripts/add-icon.mjs",
+    "package:win": "bun build --compile --minify --sourcemap --windows-icon=./assets/logo.ico --windows-hide-console --target=bun-windows-x64 ./src/index.ts --outfile ./dist/deceive-node-win.exe && node scripts/add-icon.mjs",
+    "sign:win": "node scripts/sign-exe.mjs",
+    "generate:cert": "node scripts/generate-cert.mjs",
+    "release:win": "bun run package:win && bun run sign:win",
     "package:mac": "bun build --compile --minify --sourcemap --target=bun-darwin-x64 ./src/index.ts --outfile ./dist/deceive-node-macos",
     "package:linux": "bun build --compile --minify --sourcemap --target=bun-linux-x64 ./src/index.ts --outfile ./dist/deceive-node-linux",
     "package:all": "bun run package:win && bun run package:mac && bun run package:linux",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "generate:cert:base64": "scripts/generate-cert-base64.bat"
   },
   "dependencies": {
     "chalk": "^5.3.0",
@@ -36,6 +40,7 @@
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.2",
     "@types/node-forge": "^1.3.11",

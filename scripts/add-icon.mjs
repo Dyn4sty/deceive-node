@@ -2,50 +2,78 @@
 /**
  * Icon Injection Script
  *
- * Adds the application icon to the Windows executable using rcedit.
- * Run after building the Windows executable.
+ * Adds the application icon and version metadata to the Windows executable using rcedit.
+ * Run after building the Windows executable but BEFORE signing.
  */
 
 import rcedit from 'rcedit';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import {
+  defaultExePath,
+  defaultIconPath,
+  validateFileExists,
+  getPackageMetadata,
+  logStep,
+  logSuccess,
+  logError,
+  logInfo,
+} from './utils.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = join(__dirname, '..');
+// Get paths
+const exePath = process.argv[2] ?? defaultExePath;
+const iconPath = process.argv[3] ?? defaultIconPath;
 
-const exePath = join(rootDir, 'dist', 'deceive-node-win.exe');
-const iconPath = join(rootDir, 'assets', 'logo.ico');
+async function main() {
+  console.log('Windows Executable Icon Injection');
+  console.log('==================================');
 
-console.log('Adding icon to Windows executable...');
+  // Validate executable exists
+  const exeValidation = validateFileExists(exePath, 'Executable');
+  if (!exeValidation.exists) {
+    logInfo(`Executable not found: ${exePath}`);
+    logInfo('Skipping icon injection (this is normal for non-Windows builds).');
+    process.exit(0);
+  }
 
-if (!existsSync(exePath)) {
-  console.log(`Executable not found: ${exePath}`);
-  console.log('Skipping icon injection (this is normal for non-Windows builds).');
+  // Validate icon exists
+  const iconValidation = validateFileExists(iconPath, 'Icon');
+  if (!iconValidation.exists) {
+    logError(iconValidation.error);
+    process.exit(1);
+  }
+
+  logStep('Configuration');
+  logInfo(`Executable: ${exePath}`);
+  logInfo(`Icon: ${iconPath}`);
+
+  // Get metadata from package.json
+  const metadata = getPackageMetadata();
+
+  logStep('Injecting icon and metadata...');
+
+  try {
+    await rcedit(exePath, {
+      icon: iconPath,
+      'version-string': {
+        ProductName: metadata.productName,
+        FileDescription: metadata.description,
+        CompanyName: metadata.companyName,
+        LegalCopyright: `${metadata.license} License`,
+        OriginalFilename: metadata.originalFilename,
+      },
+      'file-version': metadata.version,
+      'product-version': metadata.version,
+    });
+
+    logSuccess('Icon and version info added successfully!');
+    logInfo(`Product: ${metadata.productName} v${metadata.version}`);
+  } catch (err) {
+    logError(`Failed to add icon: ${err.message}`);
+    // Don't fail the build if icon injection fails
+    process.exit(0);
+  }
+}
+
+main().catch((err) => {
+  logError(err instanceof Error ? err.message : String(err));
   process.exit(0);
-}
-
-if (!existsSync(iconPath)) {
-  console.error(`Icon not found: ${iconPath}`);
-  process.exit(1);
-}
-
-try {
-  await rcedit(exePath, {
-    icon: iconPath,
-    'version-string': {
-      ProductName: 'Deceive',
-      FileDescription: 'Appear offline in League of Legends, VALORANT, and other Riot games',
-      CompanyName: 'League Deceiver',
-      LegalCopyright: 'GPL-3.0 License',
-      OriginalFilename: 'deceive-node-win.exe',
-    },
-    'file-version': '1.0.0',
-    'product-version': '1.0.0',
-  });
-  console.log('Icon and version info added successfully!');
-} catch (err) {
-  console.error('Failed to add icon:', err.message);
-  // Don't fail the build if icon injection fails
-  process.exit(0);
-}
+});

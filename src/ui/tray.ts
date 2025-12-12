@@ -6,10 +6,16 @@
 
 import { PresenceStatus } from '../types.js';
 import { logger } from '../utils/logger.js';
-import { join, dirname } from 'path';
 import { readFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
 import SysTray from 'systray2';
+
+// Import icon files for embedding in compiled executables
+// @ts-expect-error - Icon files are embedded in the compiled executable
+import offlineIconPath from '../../assets/icons/offline.ico' with { type: 'file' };
+// @ts-expect-error - Icon files are embedded in the compiled executable
+import mobileIconPath from '../../assets/icons/mobile.ico' with { type: 'file' };
+// @ts-expect-error - Icon files are embedded in the compiled executable
+import onlineIconPath from '../../assets/icons/online.ico' with { type: 'file' };
 
 type StatusCallback = (status: PresenceStatus) => void;
 type VoidCallback = () => void;
@@ -35,55 +41,72 @@ let mobileItem: MenuItem;
 let onlineItem: MenuItem;
 
 /**
- * Get the base path for assets
- */
-function getAssetsPath(): string {
-  // Check if running from bundled executable
-  const possiblePaths = [
-    // Development: relative to src
-    join(dirname(fileURLToPath(import.meta.url)), '../../assets'),
-    // Built: relative to dist
-    join(dirname(fileURLToPath(import.meta.url)), '../assets'),
-    // Bundled executable (Bun places assets relative to executable)
-    join(process.cwd(), 'assets'),
-    // Windows common paths
-    join(dirname(process.execPath), 'assets'),
-  ];
-
-  for (const p of possiblePaths) {
-    if (existsSync(p)) {
-      return p;
-    }
-  }
-
-  return possiblePaths[0]; // Default to first path
-}
-
-/**
  * Get icon path for a given status
+ * Returns embedded file paths when compiled, filesystem paths otherwise
  */
 export function getIconPath(status: PresenceStatus): string {
-  const assetsPath = getAssetsPath();
   const iconMap: Record<PresenceStatus, string> = {
-    [PresenceStatus.Offline]: join(assetsPath, 'icons', 'offline.ico'),
-    [PresenceStatus.Mobile]: join(assetsPath, 'icons', 'mobile.ico'),
-    [PresenceStatus.Online]: join(assetsPath, 'icons', 'online.ico'),
+    [PresenceStatus.Offline]: offlineIconPath,
+    [PresenceStatus.Mobile]: mobileIconPath,
+    [PresenceStatus.Online]: onlineIconPath,
   };
   return iconMap[status] ?? iconMap[PresenceStatus.Offline];
 }
 
 /**
  * Get icon as base64 string for systray
+ * Works with both embedded files (compiled) and filesystem paths (development)
  */
-function getIconBase64(status: PresenceStatus): string {
+async function getIconBase64Async(status: PresenceStatus): Promise<string> {
   try {
     const iconPath = getIconPath(status);
+
+    // Try Bun.file() first (works for both embedded and regular files)
+    if (typeof Bun !== 'undefined' && Bun.file) {
+      const file = Bun.file(iconPath);
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return buffer.toString('base64');
+    }
+
+    // Fallback to fs.readFileSync for compatibility
     if (existsSync(iconPath)) {
       const iconData = readFileSync(iconPath);
       return iconData.toString('base64');
     }
   } catch (err: unknown) {
     logger.debug(`Failed to load icon: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return '';
+}
+
+/**
+ * Synchronous wrapper for getIconBase64Async
+ * Note: Uses top-level await internally, only works in async contexts
+ */
+export function getIconBase64(status: PresenceStatus): string {
+  try {
+    const iconPath = getIconPath(status);
+
+    // Try Bun.file() with sync methods
+    if (typeof Bun !== 'undefined' && Bun.file) {
+      // Bun.file() returns a Blob-like object, but we need sync access
+      // For compiled executables, try reading directly
+      const file = Bun.file(iconPath);
+      // Use arrayBuffer which should work synchronously for embedded files
+      return Buffer.from(file as unknown as ArrayBuffer).toString('base64');
+    }
+
+    // Fallback to fs.readFileSync
+    if (existsSync(iconPath)) {
+      const iconData = readFileSync(iconPath);
+      return iconData.toString('base64');
+    }
+  } catch (err: unknown) {
+    // If sync fails, we need async
+    logger.debug(
+      `Failed to load icon synchronously: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
   return '';
 }
@@ -110,12 +133,12 @@ function updateMenuCheckedStates(newStatus: PresenceStatus): void {
 /**
  * Create system tray icon
  */
-export function createTray(
+export async function createTray(
   initialStatus: PresenceStatus,
   onStatusChange: StatusCallback,
   _toggleCallback: VoidCallback,
   onQuit: VoidCallback
-): void {
+): Promise<void> {
   currentStatus = initialStatus;
   statusCallback = onStatusChange;
   quitCallback = onQuit;
@@ -179,7 +202,7 @@ export function createTray(
       },
     };
 
-    const iconBase64 = getIconBase64(initialStatus);
+    const iconBase64 = await getIconBase64Async(initialStatus);
 
     systrayInstance = new SysTray.default({
       menu: {
