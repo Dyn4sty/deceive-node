@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1](https://github.com/Dyn4sty/deceive-node/compare/v1.0.0...v1.0.1) (2025-12-12)
+
+
+### Bug Fixes
+
+* disable ESLint rule for unsafe assignment in tray.ts ([ebc4bfb](https://github.com/Dyn4sty/deceive-node/commit/ebc4bfbfa0ff039edbd8365d54182709b41ba49e))
+
 ## [Unreleased]
 
 ### Added
